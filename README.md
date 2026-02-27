@@ -1,5 +1,7 @@
 # Obsidian Plaud Pin Sync
 
+> **Alpha version** — This plugin is in early development and may not work for everybody. Expect rough edges, breaking changes, and the occasional surprise. Issues and feedback welcome!
+
 An Obsidian plugin that syncs audio recordings from your [Plaud Pin](https://www.plaud.ai/) device, transcribes them locally with [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper), and creates structured markdown notes with transcripts and timestamps.
 
 ## Features
