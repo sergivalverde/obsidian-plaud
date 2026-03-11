@@ -10,6 +10,9 @@
   "keywords": ["obsidian", "plaud", "transcription", "whisper"],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "@plaud/core": "file:./lib/core"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "builtin-modules": "^3.3.0",

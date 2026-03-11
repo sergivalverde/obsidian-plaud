@@ -41,7 +41,6 @@ export class SyncManager {
     this.setStatus({ state: 'syncing', message: 'Fetching recordings list…' });
 
     try {
-      await this.plugin.authManager.ensureToken();
       const remote: PlaudFile[] = await this.plugin.plaudClient.listRecordings();
       const newOnes = remote.filter(
         r => !r.is_trash && !this.plugin.settings.syncedIds.includes(r.id),
@@ -299,7 +298,6 @@ export class SyncManager {
     this.setStatus({ state: 'transcribing', message: `Re-transcribing "${file.basename}"…` });
 
     try {
-      await this.plugin.authManager.ensureToken();
       const detail = await this.plugin.plaudClient.getRecordingDetail(plaudId);
       let transcription: TranscriptionResult | null = null;
 

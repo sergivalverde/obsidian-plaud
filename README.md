@@ -49,20 +49,30 @@ An Obsidian plugin that syncs audio recordings from your [Plaud Pin](https://www
 
 ### Authentication
 
-The plugin uses a bearer token captured from the Plaud web app:
+The plugin uses [`@plaud/core`](https://github.com/sergivalverde/plaud-toolkit) for authentication. Credentials are stored in `~/.plaud/config.json` and shared with the [plaud CLI and MCP server](https://github.com/sergivalverde/plaud-toolkit).
 
-1. Open the plugin settings in Obsidian
-2. Click **Capture token from Plaud web app**
-3. Log in to your Plaud account in the popup window
-4. The token is captured automatically
+**First-time setup:**
 
-Tokens auto-refresh every 23 hours. If a refresh fails, you'll be prompted to re-authenticate.
+1. Install the [plaud-toolkit](https://github.com/sergivalverde/plaud-toolkit):
+   ```bash
+   git clone https://github.com/sergivalverde/plaud-toolkit.git
+   cd plaud-toolkit && npm install
+   ```
+2. Log in once from the terminal:
+   ```bash
+   npx tsx packages/cli/bin/plaud.ts login
+   ```
+3. Enter your email, password, and region (us/eu). That's it — the Obsidian plugin will use the same credentials automatically.
+
+> **Note:** If you use Google Sign-In on Plaud, first set a password via "Forgot Password" on [web.plaud.ai](https://web.plaud.ai).
+
+Tokens last ~300 days and auto-refresh when within 30 days of expiry. No manual intervention needed after initial login.
 
 ### Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Region | US | `us` or `eu` — auto-corrected on first sync |
+| Region | EU | `us` or `eu` — auto-corrected on first sync |
 | Audio folder | `Plaud/Audio` | Vault folder for downloaded audio files |
 | Notes folder | `Plaud/Notes` | Vault folder for generated notes |
 | Sync interval | 60 min | Auto-sync interval (0 = manual only) |
@@ -110,54 +120,29 @@ Both options offer a toggle to also trash the recording on Plaud's servers (enab
 | `Plaud: Open Plaud recordings sidebar` | Show the recordings panel |
 | `Plaud: Re-transcribe current note` | Re-transcribe the active Plaud note |
 | `Plaud: Retranscribe pending recordings` | Batch re-transcribe all pending notes |
-| `Plaud: Re-authenticate with Plaud` | Refresh the API token |
-
-## Note template
-
-The default template creates notes with frontmatter metadata, a transcript section, and timestamped segments:
-
-```markdown
----
-plaud_id: {{id}}
-title: "{{title}}"
-date: {{date}}
-time: {{time}}
-duration: "{{duration}}"
-source: plaud_pin
-audio: "[[{{audio_path}}]]"
-tags: [voice-note, transcription]
----
-
-# {{title}}
-
-## Transcript
-
-{{transcript}}
-
-## Timestamps
-
-{{timestamps}}
-```
-
-You can customize this in the plugin settings.
 
 ## Architecture
 
 ```
+lib/core/                    — @plaud/core (shared API library from plaud-toolkit)
 src/
-  api/PlaudClient.ts      — Plaud REST API client (list, detail, download, trash)
-  auth/AuthManager.ts      — Token lifecycle and auto-refresh
-  auth/PlaudAuthFlow.ts    — Web-capture authentication flow
-  notes/NoteFactory.ts     — Template-based note creation
-  sync/SyncManager.ts      — Sync orchestration, transcription, delete
-  ui/RecordingsView.ts     — Sidebar view with sort, filter, actions
-  ui/SettingsTab.ts        — Plugin settings UI
-  whisper/WhisperBridge.ts — Local mlx-whisper transcription bridge
-  types.ts                 — TypeScript interfaces
-  settings.ts              — Settings schema and defaults
-main.ts                    — Plugin entry point
-styles.css                 — UI styles
+  api/PlaudClient.ts         — Wrapper around @plaud/core for Obsidian
+  auth/AuthManager.ts        — Token status and credentials check
+  notes/NoteFactory.ts       — Template-based note creation
+  sync/SyncManager.ts        — Sync orchestration, transcription, delete
+  ui/RecordingsView.ts       — Sidebar view with sort, filter, actions
+  ui/SettingsTab.ts          — Plugin settings UI
+  whisper/WhisperBridge.ts   — Local mlx-whisper transcription bridge
+  types.ts                   — TypeScript interfaces (re-exports from @plaud/core)
+  settings.ts                — Settings schema and defaults
+main.ts                      — Plugin entry point
+styles.css                   — UI styles
 ```
+
+## Dependencies
+
+- [`@plaud/core`](https://github.com/sergivalverde/plaud-toolkit) — Shared Plaud API library (bundled in `lib/core/`)
+- [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) — Local transcription engine (external, user-installed)
 
 ## License
 

@@ -86,27 +86,12 @@ export default class PlaudPlugin extends Plugin {
       },
     });
 
-    this.addCommand({
-      id: 'reauthenticate',
-      name: 'Re-authenticate with Plaud',
-      callback: async () => {
-        try {
-          await this.authManager.reauthenticate();
-          new Notice('Plaud: authentication successful!');
-        } catch (err: any) {
-          new Notice(`Plaud auth error: ${err.message}`);
-        }
-      },
-    });
-
-    // Start background services
-    this.authManager.scheduleRefresh();
+    // Start background sync
     this.syncManager.start();
   }
 
   async onunload() {
     this.syncManager.stop();
-    this.authManager.stopRefresh();
   }
 
   async loadSettings() {

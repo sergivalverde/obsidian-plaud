@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, Notice, Modal } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import type PlaudPlugin from '../../main';
 
 const WHISPER_LANGUAGES: Record<string, string> = {
@@ -35,6 +35,49 @@ export class SettingsTab extends PluginSettingTab {
     // ── Authentication ──────────────────────────────────────────────────────
     containerEl.createEl('h2', { text: 'Authentication' });
 
+    const authStatus = containerEl.createDiv('plaud-token-status');
+    if (this.plugin.authManager.isConfigured()) {
+      const email = this.plugin.authManager.getEmail() ?? 'unknown';
+      const tokenInfo = this.plugin.authManager.tokenStatus();
+      authStatus.createEl('span', {
+        text: `Logged in as ${email} — token: ${tokenInfo}`,
+        cls: 'plaud-token-ok',
+      });
+    } else {
+      authStatus.createEl('span', {
+        text: 'Not logged in. Run `plaud login` in your terminal to configure credentials.',
+        cls: 'plaud-token-missing',
+      });
+      const helpEl = containerEl.createEl('p', { cls: 'setting-item-description' });
+      helpEl.innerHTML = 'Credentials are stored in <code>~/.plaud/config.json</code> and shared with the plaud CLI and MCP server.';
+    }
+
+    new Setting(containerEl)
+      .setName('Verify connection')
+      .setDesc('Test that the stored credentials work.')
+      .addButton(btn => btn
+        .setButtonText('Verify')
+        .setCta()
+        .onClick(async () => {
+          if (!this.plugin.authManager.isConfigured()) {
+            new Notice('No credentials found. Run `plaud login` in your terminal first.');
+            return;
+          }
+          btn.setDisabled(true);
+          btn.setButtonText('Verifying…');
+          try {
+            const recordings = await this.plugin.plaudClient.listRecordings();
+            new Notice(`Connected — ${recordings.length} recording(s) found.`);
+            this.display();
+          } catch (err: any) {
+            new Notice(`Connection failed: ${err.message}`);
+          } finally {
+            btn.setDisabled(false);
+            btn.setButtonText('Verify');
+          }
+        }),
+      );
+
     new Setting(containerEl)
       .setName('Plaud region')
       .setDesc('Select the API region for your Plaud account.')
@@ -45,125 +88,6 @@ export class SettingsTab extends PluginSettingTab {
         .onChange(async value => {
           this.plugin.settings.plaudRegion = value as 'us' | 'eu';
           await this.plugin.saveSettings();
-        }),
-      );
-
-    // Token status banner
-    const tokenStatus = containerEl.createDiv('plaud-token-status');
-    if (this.plugin.settings.bearerToken) {
-      tokenStatus.createEl('span', {
-        text: `✓ Token stored — captured ${this.plugin.authManager.tokenAge()}`,
-        cls: 'plaud-token-ok',
-      });
-    } else {
-      tokenStatus.createEl('span', {
-        text: '✗ No token stored — follow the steps below to authenticate.',
-        cls: 'plaud-token-missing',
-      });
-    }
-
-    new Setting(containerEl)
-      .setName('Re-authenticate (embedded window)')
-      .setDesc('Try to capture the token automatically. May not complete if Google login is blocked.')
-      .addButton(btn => btn
-        .setButtonText('Open Login Window')
-        .onClick(async () => {
-          btn.setDisabled(true);
-          btn.setButtonText('Waiting…');
-          try {
-            await this.plugin.authManager.reauthenticate();
-            new Notice('Plaud: token captured!');
-            this.display();
-          } catch (err: any) {
-            // Don't show error — user likely closed it intentionally
-          } finally {
-            btn.setDisabled(false);
-            btn.setButtonText('Open Login Window');
-          }
-        }),
-      );
-
-    // ── Manual token extraction (primary reliable method) ─────────────────
-    containerEl.createEl('h3', { text: 'Manual token extraction' });
-
-    const steps = containerEl.createDiv('plaud-manual-steps');
-    steps.createEl('p', {
-      text: 'If the login window gets stuck, use this one-time browser method:',
-    });
-    const ol = steps.createEl('ol');
-    ol.createEl('li', { text: 'Open web.plaud.ai in your browser and log in.' });
-    ol.createEl('li', { text: 'Open the browser DevTools console: Cmd+Option+J (Mac) or F12 → Console.' });
-    const li3 = ol.createEl('li');
-    li3.appendText('Paste this command and press Enter (it patches fetch to intercept the real API token):');
-
-    const codeWrap = steps.createDiv('plaud-code-wrap');
-    // Intercepts the actual fetch() call to api.plaud.ai and copies
-    // the real Bearer token — localStorage only has an identity JWT, not the API token.
-    const consoleCmd =
-      `(()=>{const f=window.fetch;window.fetch=function(u,o){` +
-      `if(String(u).includes('plaud.ai')){` +
-      `const a=(o?.headers?.Authorization||o?.headers?.authorization);` +
-      `if(a?.startsWith('Bearer ')){copy(a.slice(7));` +
-      `console.log('\\u2713 Token copied to clipboard — paste it in Obsidian now')}}` +
-      `return f.apply(this,arguments)}})()` +
-      `; console.log('Interceptor active — now refresh this page (Cmd+R)')`;
-    const codeEl = codeWrap.createEl('code', { text: consoleCmd });
-    codeEl.style.fontSize = '11px';
-    codeEl.style.wordBreak = 'break-all';
-    codeEl.style.display = 'block';
-    codeEl.style.padding = '6px';
-    codeEl.style.background = 'var(--background-primary)';
-    codeEl.style.borderRadius = '4px';
-    codeEl.style.userSelect = 'all';
-
-    const copyBtn = steps.createEl('button', { text: 'Copy command', cls: 'mod-cta' });
-    copyBtn.style.marginTop = '6px';
-    copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(consoleCmd);
-      copyBtn.setText('Copied!');
-      setTimeout(() => copyBtn.setText('Copy command'), 2000);
-    });
-
-    ol.createEl('li', { text: 'Refresh the page (Cmd+R). When it loads you\'ll see "✓ Token copied to clipboard" in the console.' });
-    ol.createEl('li', { text: 'Paste the token below and click Save & verify.' });
-
-    new Setting(containerEl)
-      .setName('Bearer token')
-      .setDesc('Paste the token copied from the browser console.')
-      .addTextArea(text => {
-        text
-          .setPlaceholder('eyJ…')
-          .setValue(this.plugin.settings.bearerToken)
-          .onChange(async value => {
-            const trimmed = value.trim();
-            this.plugin.settings.bearerToken = trimmed;
-            if (trimmed) this.plugin.settings.tokenCapturedAt = new Date().toISOString();
-            await this.plugin.saveSettings();
-          });
-        text.inputEl.rows = 3;
-        text.inputEl.style.width = '100%';
-        text.inputEl.style.fontSize = '11px';
-        text.inputEl.style.fontFamily = 'monospace';
-        return text;
-      })
-      .addButton(btn => btn
-        .setButtonText('Save & verify')
-        .setCta()
-        .onClick(async () => {
-          const token = this.plugin.settings.bearerToken;
-          if (!token) { new Notice('Paste a token first.'); return; }
-          btn.setDisabled(true);
-          btn.setButtonText('Verifying…');
-          try {
-            const recordings = await this.plugin.plaudClient.listRecordings();
-            new Notice(`✓ Token valid — ${recordings.length} recording(s) found.`);
-            this.display();
-          } catch (err: any) {
-            new Notice(`Token invalid: ${err.message}`);
-          } finally {
-            btn.setDisabled(false);
-            btn.setButtonText('Save & verify');
-          }
         }),
       );
 
@@ -318,32 +242,5 @@ export class SettingsTab extends PluginSettingTab {
       this.plugin.settings.noteTemplate = textarea.value;
       await this.plugin.saveSettings();
     });
-
-    // ── Advanced (Partner API — coming soon) ─────────────────────────────────
-    containerEl.createEl('h2', { text: 'Advanced' });
-
-    const partnerDesc = containerEl.createEl('p', {
-      text: 'Partner API credentials — coming soon. These fields are reserved for future use when Plaud releases an official Partner API.',
-      cls: 'setting-item-description',
-    });
-    partnerDesc.style.opacity = '0.6';
-
-    const clientIdSetting = new Setting(containerEl)
-      .setName('Partner Client ID')
-      .addText(text => text
-        .setPlaceholder('(coming soon)')
-        .setValue(this.plugin.settings.partnerClientId)
-        .setDisabled(true),
-      );
-    clientIdSetting.settingEl.style.opacity = '0.5';
-
-    const secretSetting = new Setting(containerEl)
-      .setName('Partner Secret Key')
-      .addText(text => text
-        .setPlaceholder('(coming soon)')
-        .setValue(this.plugin.settings.partnerSecretKey)
-        .setDisabled(true),
-      );
-    secretSetting.settingEl.style.opacity = '0.5';
   }
 }
